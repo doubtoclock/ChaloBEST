@@ -1,5 +1,5 @@
 # Create your views here.
-from models import *
+from .models import *
 from django.shortcuts import render_to_response, get_object_or_404
 from ox.django.shortcuts import get_object_or_404_json, render_to_json_response
 

@@ -1,13 +1,13 @@
 from django.conf.urls.defaults import *
-import settings
+from . import settings
 from os.path import join
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
 admin.autodiscover()
-from feeds import RouteFeed
+from .feeds import RouteFeed
 #import ox.django.api.urls
 #import mumbai
-from users.forms import SignupFormExtra 
+from .users.forms import SignupFormExtra 
 
 
 urlpatterns = patterns('',

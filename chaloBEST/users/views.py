@@ -10,20 +10,20 @@ from django.http import HttpResponse
 from django.template import RequestContext
 import django.utils.simplejson as json
 import os
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 #from users.models import *
-from StringIO import StringIO
+from io import StringIO
 #from django.http import HttpResponse
 from django.contrib.auth.models import User
 
 
 def getsmsfeed(request):
 	current_user = request.user
-	print current_user	
+	print(current_user)	
 	users = user.objects.all()
 
-	apireq = urllib2.Request('http://sms.chalobest.in/messages_json/?phone_no='+mobilenumber)
-        apires = urllib2.urlopen(apireq)
+	apireq = urllib.request.Request('http://sms.chalobest.in/messages_json/?phone_no='+mobilenumber)
+        apires = urllib.request.urlopen(apireq)
 	try:
                         #jsonres = json.dumps(apires,sort_keys=True)
                         ##print jsonres.__class__
@@ -34,11 +34,11 @@ def getsmsfeed(request):
                 sjstr = sorted(l, key=lambda l:l[0])
                         #print sjstr[0]['datetime']
                         #k = [i for i, j, k in jstr[1]]
-                print sjstr[-5:]
+                print(sjstr[-5:])
 
                         #print jstr.get('text')
                         #print l.__class__
-        except ValueError,e:
-                print e
+        except ValueError as e:
+                print(e)
 
 

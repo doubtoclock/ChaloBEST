@@ -19,7 +19,7 @@ def csvToJSON():
         routeNo = a[0].strip()
 #        print a
         if routeNo != '':
-            if atlasDict.has_key(routeNo):
+            if routeNo in atlasDict:
                 atlasDict[routeNo].append(a)
             else:
                 atlasDict[routeNo] = [a]
@@ -51,9 +51,9 @@ def processJSON():
     routeMapping = json.loads(open(join(PROJECT_ROOT, "../db_csv_files/routeMapping.json")).read())    
     routes = json.loads(open(join(PROJECT_ROOT, "../db_csv_files/Atlas.json")).read())
     outDict = {}
-    for key in routes.keys():
+    for key in list(routes.keys()):
         previousRow = []
-        print key
+        print(key)
         if key not in routeMapping: #make note of routeNames we dont have routeAlias for yet.
             routeErrors['routes'].append(key) 
         else:  #else, go ahead ..
@@ -97,12 +97,12 @@ def groupUnique():
     routes = json.loads(open(join(PROJECT_ROOT, "../db_csv_files/atlasCopied.json")).read())
     errors = {}
     outDict = {}
-    for key in routes.keys():
+    for key in list(routes.keys()):
 
         
         outDict[key] = []
         for row in routes[key]:
-            print key
+            print(key)
             d = {
                 'from': row[6],
                 'to': row[9],                
@@ -116,7 +116,7 @@ def groupUnique():
             matchedRow = isNotUnique(d, outDict[key])
             schedule = row[24]
             if matchedRow is not None:
-                if outDict[key][matchedRow]['rows'].has_key(schedule):
+                if schedule in outDict[key][matchedRow]['rows']:
                     outDict[key][matchedRow]['rows'][schedule].append(row)
                 else:
                     outDict[key][matchedRow]['rows'][schedule] = [row]
@@ -146,8 +146,8 @@ def importUniqueRoutes():
     stopMapping = {} #FIXME
     stopErrors = [] #This should ideally never happen, and any errors here are bad and would indicate problems with the fuzzy matching logic, most likely.
     routeScheduleErrors = []
-    for route in data.keys():
-        if routeMapping.has_key(route):
+    for route in list(data.keys()):
+        if route in routeMapping:
             routeCode = routeMapping[route]
             try:
                 routeObj = Route.objects.get(code=routeCode)
@@ -199,7 +199,7 @@ def importUniqueRoutes():
             obj.save()
             #pdb.set_trace()
 #            print thisRoute['rows'].keys()
-            for schedule in thisRoute['rows'].keys(): #loop through each schedule per UniqueRoute and save it
+            for schedule in list(thisRoute['rows'].keys()): #loop through each schedule per UniqueRoute and save it
                 rows = thisRoute['rows'][schedule]
                 try:
                     depot = Depot.objects.get(code=row[6])
@@ -338,7 +338,7 @@ def getRouteCodes():
     for row in atlasRawCSV:
         routeAlias = row[0]
         routeCode = row[1]
-        print routeCode
+        print(routeCode)
         if routeCode in atlasDict:
             mapping[routeCode] = routeAlias
         else:
@@ -354,9 +354,9 @@ Import RouteMaster into db
 '''
 def importRouteMaster():
     CsvFile = csv.reader(open(join(PROJECT_ROOT, "../db_csv_files/Route.csv"), "r"), delimiter='\t')
-    test = CsvFile.next()
+    test = next(CsvFile)
     stop_errors = []
-    print test
+    print(test)
     for row in CsvFile:
         if len(row) < 1:
             continue
@@ -364,7 +364,7 @@ def importRouteMaster():
         if from_to is None:
             stop_errors.append(row[0])
             continue
-        print row[0]
+        print(row[0])
         obj = Route(code=row[0], alias=row[1], from_stop_txt=row[2], to_stop_txt=row[3], from_stop=from_to[0], to_stop=from_to[1], distance=float(row[4]), stages=int(row[5]))
         obj.save()
     errors = open(join(PROJECT_ROOT, "../errors/RouteErrors.json"), "w")

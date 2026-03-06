@@ -1,5 +1,5 @@
 from django.conf.urls.defaults import *
-import apiviews
+from . import apiviews
 
 urlpatterns = patterns('',
     (r'^route/(?P<code>.*)/', apiviews.route), #FIXME: better regexp for route alias?

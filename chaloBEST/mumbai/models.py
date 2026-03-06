@@ -57,8 +57,8 @@ SCHED = {
 # Runtime start and end hour
 # matching column `runtime$` where `$` = index % 4 + 1
 RUNTIMES = (
-    (00, 07), 
-    (07, 11),
+    (00, 0o7), 
+    (0o7, 11),
     (11, 17),
     (17, 20),
     (20, 24)
@@ -241,7 +241,7 @@ class Stop(models.Model):
             self.point = point
         self.display_name = data['display_name']
         self.name_mr = data['name_mr']
-        if data.has_key('alternative_names') and data['alternative_names'].strip() != '':
+        if 'alternative_names' in data and data['alternative_names'].strip() != '':
             for a in self.alt_names.all():
                 a.delete()
             for a in data['alternative_names'].split(","):
@@ -514,7 +514,7 @@ class RouteSchedule(models.Model):
     headway5 = models.IntegerField(blank=True, null=True)
 
     def __unicode__(self):
-        return "%s: %s" % (unicode(self.unique_route), self.schedule_type,)
+        return "%s: %s" % (str(self.unique_route), self.schedule_type,)
 
 
 class RouteType(models.Model):

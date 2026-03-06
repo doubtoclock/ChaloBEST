@@ -50,9 +50,9 @@ def fix_distances():
             if detail.stop.id == from_stop.id: record = True
 
         if record:
-            print Exception("UniqueRoute %d: %s from %s to %s ran off the end while measuring distance!" %(unique_route.id, unique_route, unique_route.from_stop.code, unique_route.to_stop.code))
+            print(Exception("UniqueRoute %d: %s from %s to %s ran off the end while measuring distance!" %(unique_route.id, unique_route, unique_route.from_stop.code, unique_route.to_stop.code)))
         if not distance:
-            print Exception("UniqueRoute %d: %s from %s to %s still has no distance!" % (unique_route.id, unique_route, unique_route.from_stop.code, unique_route.to_stop.code))
+            print(Exception("UniqueRoute %d: %s from %s to %s still has no distance!" % (unique_route.id, unique_route, unique_route.from_stop.code, unique_route.to_stop.code)))
 
         #if distance > float(unique_route.distance):
         if not unique_route.distance:
@@ -67,7 +67,7 @@ def fix_missing_runtimes(routecode=None):
         rslist = RouteSchedule.objects.all()
     else:
         rslist =  RouteSchedule.objects.filter(unique_route__route__code=routecode)
-        print 'rslist count', len(rslist)
+        print('rslist count', len(rslist))
 
     for schedule in rslist:
         # other schedules for the same unique route (but at different times)

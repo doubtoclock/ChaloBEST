@@ -1,7 +1,7 @@
 #from django.contrib.syndication.views import Feed
 #from django.contrib.gis.feeds import Feed
 from django.contrib.gis.feeds import Feed
-from mumbai.models import *
+from .mumbai.models import *
 from django.shortcuts import get_object_or_404
 
 

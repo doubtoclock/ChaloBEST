@@ -107,7 +107,7 @@ def Depot_save(entry):
         )
 
     if created:
-        print obj.__dict__
+        print(obj.__dict__)
 
 
 def Holiday_save(entry):
@@ -162,7 +162,7 @@ def Road_save(entry):
     obj, created = Road.objects.get_or_create(code=int(entry[0]), defaults={'name': str(entry[1])})
     obj.save()
     if created:
-        print obj.__dict__
+        print(obj.__dict__)
         
     # object exists, bail
     #if Road.objects.filter(code=entry[0]):
@@ -188,7 +188,7 @@ def Area_save(entry):
     obj, created = Area.objects.get_or_create(code=int(entry[0]), defaults={'name': str(entry[1])})
     obj.save()
     if created:
-        print obj.__dict__            
+        print(obj.__dict__)            
 
     #obj = Area(code=int(entry[0]), name= str(entry[1])) 
     #obj.save()
@@ -229,9 +229,9 @@ def Stop_save(entry):
 
 def StopMarathi_save(entry):
     obj = Stop.objects.get(code=str(entry[0])) 
-    mrstr =  unicode(entry[1], 'utf-8')
+    mrstr =  str(entry[1], 'utf-8')
     if mrstr=='':
-        print entry
+        print(entry)
     obj.name_mr = mrstr
     obj.save()    
     #return obj
@@ -239,7 +239,7 @@ def StopMarathi_save(entry):
 
 def AreaMarathi_save(entry):
     obj = Area.objects.get(code=int(entry[0])) 
-    obj.name_mr = unicode(entry[1], 'utf-8')
+    obj.name_mr = str(entry[1], 'utf-8')
     obj.save()
     #print obj.__dict__  
 
@@ -302,7 +302,7 @@ mappingtosave = {
 def loadFKinRouteDetail():
     err=[]
     good_saves = 0
-    print "\nLoading foreign keys into Route Details ... "
+    print("\nLoading foreign keys into Route Details ... ")
     for rd in RouteDetail.objects.all():
         try:
             rd.route=Route.objects.get(code=rd.route_code)
@@ -314,11 +314,11 @@ def loadFKinRouteDetail():
 
     errors = open(join(PROJECT_ROOT, "../errors/RouteNotFoundErrors.json"), "w")
     size = len(err)
-    print "No. of entries in RouteDetail mapped to Route: " , str(good_saves)
-    print "No. of entries in RouteDetail not mapped to Route: " , str(size)
+    print("No. of entries in RouteDetail mapped to Route: " , str(good_saves))
+    print("No. of entries in RouteDetail not mapped to Route: " , str(size))
 
     if (size != 0) :
-        print "See /errors/RouteNotFoundErrors.json for details"
+        print("See /errors/RouteNotFoundErrors.json for details")
         
     errors.write(json.dumps(str(err), indent=2))
     errors.close()
@@ -331,17 +331,17 @@ def CsvLoader(thismodel):
     try:
         CsvFile = csv.reader(open(join(PROJECT_ROOT, "../db_csv_files/"+thismodel+ ".csv"), "r"), delimiter="\t")
     except:
-        print "Error opening file. Please check if ", thismodel," file exists and you have read/write permissions. Input files should be tab delimited, not comma delimited."
+        print("Error opening file. Please check if ", thismodel," file exists and you have read/write permissions. Input files should be tab delimited, not comma delimited.")
         return
     globalerr =[]
 
     #f.write("Data" + '\t' + "Error thrown" + '\n')
 
-    header = CsvFile.next()
-    print "\nLoading " + thismodel + "s..."
-    print "Fields: ", header
+    header = next(CsvFile)
+    print("\nLoading " + thismodel + "s...")
+    print("Fields: ", header)
     if ( header[0].find(',') != -1 ):
-       print thismodel + "input file should be tab delimited, not comma delimited!"
+       print(thismodel + "input file should be tab delimited, not comma delimited!")
        return
     errcount=0
     for entry in CsvFile:
@@ -363,7 +363,7 @@ def CsvLoader(thismodel):
     stats = str(DataLinesInFile - errcount ) + " " +  thismodel + "s loaded without errors. Number of Errors encountered: " + str(errcount) + ". "
     if errcount > 0 :
         stats+="See " +  thismodel + "Errors.json file for details."
-    print stats
+    print(stats)
     return
 
 def fire_up():
@@ -371,17 +371,17 @@ def fire_up():
         CsvLoader(model)
     loadFKinRouteDetail()
 
-    print "loading UniqueRoutes..."    
-    import import_atlas as ia
+    print("loading UniqueRoutes...")    
+    from . import import_atlas as ia
     ia.do()
-    print "Fixing missing distances, headways,and runtimes..."
-    import fix_missing_atlas_data as fix_data
+    print("Fixing missing distances, headways,and runtimes...")
+    from . import fix_missing_atlas_data as fix_data
     fix_data.do()
-    print "Making slugs..."
-    import make_slugs
+    print("Making slugs...")
+    from . import make_slugs
     make_slugs.do()
-    print "Running cleanup scripts..."
-    import postload_cleanup as postclean
+    print("Running cleanup scripts...")
+    from . import postload_cleanup as postclean
     postclean.do()
 
     

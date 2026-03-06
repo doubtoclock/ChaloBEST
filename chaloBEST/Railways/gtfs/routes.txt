@@ -1,5 +1,5 @@
-route_id,agency_id,route_short_name,route_long_name,route_type,route_url,route_color
-1,1,,Western,2,,
-2,2,,Central,2,,
-3,2,,Harbour,2,,
-4,2,,Trans Harbour,2,,
+route_id,agency_id,route_short_name,route_long_name,route_type,route_color
+CL,CR,Central,Central Line (CST-Kasara/Khopoli),2,FF0000
+WL,WR,Western,Western Line (Churchgate-Virar),2,00FF00
+HL,CR,Harbour,Harbour Line (CST-Panvel),2,0000FF
+TL,CR,Trans-Harbour,Trans-Harbour Line (Thane-Panvel),2,FF00FF

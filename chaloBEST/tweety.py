@@ -1,4 +1,4 @@
-from utils import *
+from .utils import *
 tweety = Tweetbot()
 from twitter import *    
 auth = OAuth("296097629-QdjEw3B2z4LoCWgA6yOBXzKuO2ukModQQyEiTm2i", "BofoeYVwm4pG3dTwf32kFsDgwnp9tvxnX7utH9BkKrcUz", "07n0QQY30ge2Pvz9WThPJAZzl", "adFFBOcDfQPu1DlGLLygsV83mnFOHmjyjQZKe11fWzGNkKAhQr")
@@ -11,10 +11,10 @@ for msg in twitter_userstream.user():
    f2.write(str(msg))
    f2.write("\n")
    f2.flush()
-   if msg.has_key('entities'):
+   if 'entities' in msg:
       try:
          if len(msg['entities']['user_mentions']) == 1 and str(msg['entities']['user_mentions'][0]['id']) == '296097629':
-            print msg['text'], msg['id_str']   
+            print(msg['text'], msg['id_str'])   
             text = msg['text']
             usr = msg['user']['screen_name']
             txt = text.lower().replace("@chalobest","").strip(" ").strip("\n")
@@ -27,5 +27,5 @@ for msg in twitter_userstream.user():
          f.write("\n")
          f.flush()
       except:
-         print sys.exc_info()[1]
+         print(sys.exc_info()[1])
 

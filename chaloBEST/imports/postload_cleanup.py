@@ -2,7 +2,7 @@ from mumbai.models import *
 
 # for Road, Area, Landmark, Stop
 def copynames2display_name():
-    print "Copying names to display_name field..."
+    print("Copying names to display_name field...")
     for obj in Stop.objects.all():
         obj.name =obj.name.title()
         obj.display_name =obj.name

@@ -12,3 +12,4 @@ local
 pip-log.txt
 src
 tmp/
+._*

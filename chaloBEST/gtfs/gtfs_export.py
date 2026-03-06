@@ -98,7 +98,7 @@ def getCompleteRoutes2():
             rtdt[rs.unique_route.route] = False
 
             
-    for k,v in rtdt.iteritems():
+    for k,v in rtdt.items():
         if v:
             routelist.append(k)
         
@@ -153,9 +153,9 @@ def rindex(lst, item):
     gets last occurence of item from list
     """
     try:
-        return dropwhile(lambda x: lst[x] != item, reversed(xrange(len(lst)))).next()
+        return next(dropwhile(lambda x: lst[x] != item, reversed(range(len(lst)))))
     except StopIteration:
-        raise ValueError, "rindex(lst, item): item not in list"
+        raise ValueError("rindex(lst, item): item not in list")
 
 
 def make_csv_writer(filename):
@@ -258,7 +258,7 @@ def export_calendar():
             
             f.writerow([ss['code']] + running + [start_date_str,end_date_str])
         except:
-            print "Error:", str(ss) + '\t' +  str(sys.exc_info()[0]) + '\n'                
+            print("Error:", str(ss) + '\t' +  str(sys.exc_info()[0]) + '\n')                
 
 def export_feed_info():
     f = make_csv_writer("feed_info.txt")
@@ -491,7 +491,7 @@ def get_routedetail_subset(unr, direction):
             break
 
     if from_stop_found == 0:
-        print "From-Stop not found in Route Details for unr.id", unr.id, "unr.from_stop_txt=", unr.from_stop_txt 
+        print("From-Stop not found in Route Details for unr.id", unr.id, "unr.from_stop_txt=", unr.from_stop_txt) 
         mismatched_unrs['from'].append({"unr":unr,"unr_from_stop_txt":unr.from_stop_txt,"unr_from_stop":unr.from_stop, "route":unr.route})
 
 
@@ -514,7 +514,7 @@ def get_routedetail_subset(unr, direction):
         multiple_to_stops.append({"unr":unr,"count":to_stop_found,"to_stop":unr.to_stop})
         
     if to_stop_found == 0:
-        print "To-Stop not found in Route Details for unr.id", unr.id , " unr.to_stop_txt=", unr.to_stop_txt
+        print("To-Stop not found in Route Details for unr.id", unr.id , " unr.to_stop_txt=", unr.to_stop_txt)
         mismatched_unrs['to'].append({"unr":unr,"unr_to_stop_txt":unr.to_stop_txt,"unr_to_stop":unr.to_stop, "route":unr.route})
        
     # indexes found , splice list
@@ -548,7 +548,7 @@ def get_routedetail_subset(unr, direction):
         
     # if route indexing is anything less than 5 or negative, then alert
     if (to_index - from_index) < 5:
-        print "Route::",unr.route.code , "from pos", from_index, " to pos ", to_index
+        print("Route::",unr.route.code , "from pos", from_index, " to pos ", to_index)
         badroutes.add(unr.route)
 
     return rd_subset
@@ -748,7 +748,7 @@ def export_stops(routelist):
                 f.writerow([str(stop.code),stop.name,stop.point.coords[1],stop.point.coords[0],str("Marathi:"+stop.name_mr+" Road:"+stop.road.name+" Area:"+stop.area.name+" Altnames:" )])
             
         except:
-            print "error for writerow", stop.__dict__, stop.point.coords  
+            print("error for writerow", stop.__dict__, stop.point.coords)  
             #print "error: Stop id: %s, stop_code:%s " 
 
 
@@ -933,7 +933,7 @@ def convert_to_24h_time(dt):
         
 
 def export_stop_times(routelist):
-    print "Exporting stop times.."
+    print("Exporting stop times..")
     f = make_csv_writer("stop_times.txt")
     #f.writerow(["trip_id","arrival_time","departure_time","stop_id","stop_sequence", "cumulative_distance", "isStage"])
     f.writerow(["trip_id","arrival_time","departure_time","stop_id","stop_sequence"])
@@ -945,7 +945,7 @@ def export_stop_times(routelist):
     nospeeds=0
     rdlistempty=0
     
-    print "Trips with faulty RDs::"    
+    print("Trips with faulty RDs::")    
     for schedule, unr, route, direction, trip_id in generate_trips_unr():
 
         if route not in routelist: continue
@@ -958,7 +958,7 @@ def export_stop_times(routelist):
         #details = parseDistancesForDetails(details, parse_stages=True)
 
         if len(details) <= 4:
-            print "rdlist not populated"   
+            print("rdlist not populated")   
             rdlistempty+=1
             badroutes.add(route)
             #continue
@@ -1007,12 +1007,12 @@ def export_stop_times(routelist):
         # checks and failsafes            
         if avgspeed < 5.0/60.0:
             #avg human walking speed is 5 km/hr
-            print "Slow: Trip: %s::Speed: %.2f, Dist:(route: %s, unr: %s, rd: %s) ,run_time: %s,  stops: %s" %(trip_id, avgspeed*60.0, dist1, dist2, dist3, str(runtime), str(len(details))) 
+            print("Slow: Trip: %s::Speed: %.2f, Dist:(route: %s, unr: %s, rd: %s) ,run_time: %s,  stops: %s" %(trip_id, avgspeed*60.0, dist1, dist2, dist3, str(runtime), str(len(details)))) 
             slowroutes.add(route)
             tooslows+=1
 
         if avgspeed > 40.0/60.0:
-             print "Fast: Trip: %s::Speed: %.2f, Dist:(route: %s, unr: %s, rd: %s) ,run_time: %s,  stops: %s" %(trip_id, avgspeed*60.0, dist1, dist2, dist3, str(runtime), str(len(details))) 
+             print("Fast: Trip: %s::Speed: %.2f, Dist:(route: %s, unr: %s, rd: %s) ,run_time: %s,  stops: %s" %(trip_id, avgspeed*60.0, dist1, dist2, dist3, str(runtime), str(len(details)))) 
              toofasts+=1
              fastroutes.add(route)
             #avgspeed=30.0/60.0
@@ -1115,11 +1115,11 @@ def export_stop_times(routelist):
                 
 
 
-    print "Trips too fast::", toofasts 
-    print "Trips too slow::", tooslows 
-    print "Trips with no speeds", nospeeds
+    print("Trips too fast::", toofasts) 
+    print("Trips too slow::", tooslows) 
+    print("Trips with no speeds", nospeeds)
 
-    print "Exporting stop times done."
+    print("Exporting stop times done.")
                                 
         #-----------------------------------------------------------------------------------
 
@@ -1442,7 +1442,7 @@ def export_frequencies2(routelist):
                     lt = time_of("23:59:59")
                     lt_overflow = True
             except:
-                print "time comparison error "
+                print("time comparison error ")
                 pass
 
 
