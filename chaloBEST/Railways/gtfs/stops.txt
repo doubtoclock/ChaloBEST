@@ -78,3 +78,8 @@ VK,Vikhroli,19.101,72.926,,0
 VLP,Vile Parle,19.098,72.844,,0
 VR,Vasai Road,19.366,72.828,,0
 VTN,Vithalwadi,19.261,73.149,,0
+VIRAR,VIRAR,,,,0
+MAHALAXMI,Mahalakshmi,,,,0
+LOWERPAREL,Lower Parel,,,,0
+MAHIM,Mahim Jn.,,,,0
+KANDIVLI,Kandivli,,,,0
