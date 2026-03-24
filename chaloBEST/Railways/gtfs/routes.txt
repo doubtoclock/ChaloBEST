@@ -1,4 +1,4 @@
-route_id,agency_id,route_short_name,route_long_name,route_type,route_color,route_text_color
+route_id,agency_id,route_short_name,route_long_name,route_type,route_color
 CL,CR,CL,CST to Kasara / Khopoli,2,FF0000
 WL,WR,WL,Churchgate to Virar,2,00FF00
 WR_DN_AC,WR,Western AC Down,Western AC Line Down,2,00AA00
