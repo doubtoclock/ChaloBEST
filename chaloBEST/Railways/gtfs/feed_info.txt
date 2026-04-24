@@ -1,0 +1,2 @@
+feed_publisher_name,feed_publisher_url,feed_lang,feed_contact_url,feed_start_date,feed_end_date,feed_version
+Indian Railways,https://www.indianrailways.gov.in/,en,https://www.indianrailways.gov.in/,20260101,20271231,20260424

@@ -1,0 +1,8 @@
+route_id,agency_id,route_short_name,route_long_name,route_type,route_color,route_text_color
+L1,MMRDA,L1,Mumbai Metro Line 1,1,1F77B4,FFFFFF
+L2A,MMRDA,L2A,Mumbai Metro Line 2A,1,FFCB05,000000
+L3,MMRDA,L3,Mumbai Metro Line 3 (Aqua Line),1,00B3A4,FFFFFF
+L7,MMRDA,L7,Mumbai Metro Line 7 (Red Line),1,E53935,FFFFFF
+CL,CR,Central,Mumbai Suburban Railway Central Line,2,C62828,
+HL,CR,Harbour,Mumbai Suburban Railway Harbour Line,2,2E7D32,
+WL,WR,Western,Mumbai Suburban Railway Western Line,2,1565C0,

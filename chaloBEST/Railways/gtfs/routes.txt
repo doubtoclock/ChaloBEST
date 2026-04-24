@@ -1,7 +1,4 @@
 route_id,agency_id,route_short_name,route_long_name,route_type,route_color
-CL,CR,CL,CST to Kasara / Khopoli,2,FF0000
-WL,WR,WL,Churchgate to Virar,2,00FF00
-WR_DN_AC,WR,Western AC Down,Western AC Line Down,2,00AA00
-WR_UP_AC,WR,Western AC Up,Western AC Line Up,2,00AA00
-HL,CR,HL,CST to Panvel,2,0000FF
-TL,CR,TL,Thane to Panvel,2,FF00FF
+CL,CR,Central,Mumbai Suburban Railway Central Line,2,C62828
+HL,CR,Harbour,Mumbai Suburban Railway Harbour Line,2,2E7D32
+WL,WR,Western,Mumbai Suburban Railway Western Line,2,1565C0

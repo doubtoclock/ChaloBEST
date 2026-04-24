@@ -1,19 +1,28 @@
-import csv
-import pandas as pd
 import os
 import re
+import zipfile
+from datetime import date
 
-INPUT_DIR = "parsed/clean"
-STOP_TIMES = "gtfs/stop_times.txt"
-TRIPS = "gtfs/trips.txt"
-STOPS_FILE = "gtfs/stops.txt"
+import pandas as pd # type: ignore
+
+INPUT_DIR = "parsed/csv"
+GTFS_DIR = "gtfs"
+STOP_TIMES = os.path.join(GTFS_DIR, "stop_times.txt")
+TRIPS = os.path.join(GTFS_DIR, "trips.txt")
+STOPS_FILE = os.path.join(GTFS_DIR, "stops.txt")
+ROUTES_FILE = os.path.join(GTFS_DIR, "routes.txt")
+CALENDAR_FILE = os.path.join(GTFS_DIR, "calendar.txt")
+FEED_INFO_FILE = os.path.join(GTFS_DIR, "feed_info.txt")
+GTFS_ZIP = os.path.join(GTFS_DIR, "gtfs.zip")
+INCLUDE_SHAPES = False
+
+TRAIN_PATTERN = re.compile(r"^\d{4,6}[A-Z]?$")
+TIME_PATTERN = re.compile(r"\b\d{2}:\d{2}\b")
 
 stop_rows = []
 trip_rows = []
+stop_name_by_id = {}
 
-# -----------------------------
-# Map CSV filename -> route_id in routes.txt
-# -----------------------------
 FILE_TO_ROUTE = {
     "CR_timetable_DN.csv": "CL",
     "CR_timetable_UP.csv": "CL",
@@ -23,7 +32,6 @@ FILE_TO_ROUTE = {
     "WR_timetable_UP.csv": "WL",
 }
 
-# Map CSV filename -> direction_id (0=outbound, 1=inbound)
 FILE_TO_DIRECTION = {
     "CR_timetable_DN.csv": 0,
     "CR_timetable_UP.csv": 1,
@@ -33,7 +41,6 @@ FILE_TO_DIRECTION = {
     "WR_timetable_UP.csv": 1,
 }
 
-# Trip ID prefix to avoid duplicates across files
 FILE_TO_PREFIX = {
     "CR_timetable_DN.csv": "CR_DN",
     "CR_timetable_UP.csv": "CR_UP",
@@ -43,9 +50,36 @@ FILE_TO_PREFIX = {
     "WR_timetable_UP.csv": "WR_UP",
 }
 
-# -----------------------------
-# Coordinates for stops missing lat/lon
-# -----------------------------
+ROUTE_METADATA = {
+    "CL": {
+        "agency_id": "CR",
+        "route_short_name": "Central",
+        "route_long_name": "Mumbai Suburban Railway Central Line",
+        "route_type": 2,
+        "route_color": "C62828",
+    },
+    "HL": {
+        "agency_id": "CR",
+        "route_short_name": "Harbour",
+        "route_long_name": "Mumbai Suburban Railway Harbour Line",
+        "route_type": 2,
+        "route_color": "2E7D32",
+    },
+    "WL": {
+        "agency_id": "WR",
+        "route_short_name": "Western",
+        "route_long_name": "Mumbai Suburban Railway Western Line",
+        "route_type": 2,
+        "route_color": "1565C0",
+    },
+}
+
+SHAPE_BY_ROUTE = {
+    "CL": "shape_CL",
+    "HL": "shape_HL",
+    "WL": "shape_WL",
+}
+
 STOP_COORDS = {
     "VIRAR": (19.4550, 72.8110),
     "MAHALAXMI": (18.9830, 72.8220),
@@ -66,16 +100,21 @@ STOP_COORDS = {
     "THANSIT": (19.5200, 73.3600),
     "KHARDI": (19.5510, 73.3750),
     "UMBERMALLI": (19.5780, 73.4000),
-    "KELAVLI": (19.4300, 73.3500),
-    "DOLAVLI": (19.4500, 73.3700),
-    "LOWJEE": (19.4700, 73.3900),
-    "KHOPOLI": (18.7870, 73.3420),
+    "BDU": (19.1663883, 73.2390496),
+    "VGI": (19.0941667, 73.3011111),
+    "SHD": (19.0629850, 73.3173860),
+    "NRL": (19.0271130, 73.3189550),
+    "BVS": (18.9706550, 73.3313240),
+    "KJT": (18.9111580, 73.3206910),
+    "PLG": (18.8840900, 73.3205500),
+    "KELAVLI": (18.8581580, 73.3182800),
+    "DOLAVLI": (18.8446750, 73.3188380),
+    "LOWJEE": (18.8099550, 73.3350060),
+    "KHOPOLI": (18.7884484, 73.3460214),
     "MSR": (19.0350, 73.0720),
 }
 
-# -----------------------------
-# Normalize station names
-# -----------------------------
+
 def normalize_station(name):
     s = str(name).upper().strip()
     s = s.replace("'", "")
@@ -83,14 +122,11 @@ def normalize_station(name):
     s = s.replace("(", "")
     s = s.replace(")", "")
     s = s.replace("-", " ")
-    s = " ".join(s.split())  # collapse multiple spaces
+    s = " ".join(s.split())
     return s
 
-# -----------------------------
-# Station aliases: CSV name -> stop_id in stops.txt
-# -----------------------------
+
 ALIAS_TO_STOP_ID = {
-    # Central line
     "CSMT": "CSMT",
     "MUMBAI CSMT": "CSMT",
     "CHHATRAPATI SHIVAJI MAHARAJ TERMINUS": "CSMT",
@@ -130,8 +166,6 @@ ALIAS_TO_STOP_ID = {
     "KARJAT": "KJT",
     "PALASDHARI": "PLG",
     "KASARA": "KSR",
-
-    # Western line
     "CHURCHGATE": "CCG",
     "MARINE LINES": "MR",
     "CHARNI ROAD": "CHR",
@@ -147,6 +181,7 @@ ALIAS_TO_STOP_ID = {
     "BANDRA": "BA",
     "KHAR ROAD": "KHR",
     "SANTACRUZ": "STC",
+    "SANTA CRUZ": "STC",
     "VILE PARLE": "VLP",
     "VILEPARLE": "VLP",
     "ANDHERI": "AND",
@@ -168,8 +203,6 @@ ALIAS_TO_STOP_ID = {
     "VIRAR": "VIRAR",
     "MAHALAXMI": "MAHALAXMI",
     "MAHALAKSHMI": "MAHALAXMI",
-
-    # Harbour line
     "DOCKYARD ROAD": "DCK",
     "REAY ROAD": "RYR",
     "COTTON GREEN": "CTN",
@@ -195,8 +228,6 @@ ALIAS_TO_STOP_ID = {
     "MANSAROVAR": "MSR",
     "PANVEL": "PNV",
     "KINGS CIRCLE": "KCE",
-
-    # Stations beyond typical suburban
     "KOPAR": "KOPAR",
     "DOMBIVLI": "DOMBIVLI",
     "THAKURLI": "THAKURLI",
@@ -209,6 +240,7 @@ ALIAS_TO_STOP_ID = {
     "ATGAON": "ATGAON",
     "THANSIT": "THANSIT",
     "KHARDI": "KHARDI",
+    "UMBERMALI": "UMBERMALLI",
     "UMBERMALLI": "UMBERMALLI",
     "KELAVLI": "KELAVLI",
     "DOLAVLI": "DOLAVLI",
@@ -216,225 +248,704 @@ ALIAS_TO_STOP_ID = {
     "KHOPOLI": "KHOPOLI",
 }
 
+CENTRAL_DN_ORDER = [
+    "TRAIN",
+    "CSMT",
+    "Masjid",
+    "Sandhurst Road",
+    "Byculla",
+    "Chinchpokli",
+    "Currey Road",
+    "Parel",
+    "Dadar",
+    "Matunga",
+    "Sion",
+    "Kurla",
+    "Vidyavihar",
+    "Ghatkopar",
+    "Vikhroli",
+    "Kanjurmarg",
+    "Bhandup",
+    "Nahur",
+    "Mulund",
+    "Thane",
+    "Kalwa",
+    "Mumbra",
+    "Diva Junction",
+    "Kopar",
+    "Dombivli",
+    "Thakurli",
+    "Kalyan",
+    "Shahad",
+    "Ambivli",
+    "Titwala",
+    "Khadavli",
+    "Vasind",
+    "Asangaon",
+    "Atgaon",
+    "Thansit",
+    "Khardi",
+    "Umbermali",
+    "Kasara",
+    "Vithalwadi",
+    "Ulhasnagar",
+    "Ambernath",
+    "Badlapur",
+    "Vangani",
+    "Shelu",
+    "Neral",
+    "Bhivpuri Road",
+    "Karjat",
+    "Palasdhari",
+    "Kelavli",
+    "Dolavli",
+    "Lowjee",
+    "Khopoli",
+]
+
+CENTRAL_UP_ORDER = [
+    "TRAIN",
+    "Kasara",
+    "Umbermali",
+    "Khardi",
+    "Thansit",
+    "Atgaon",
+    "Asangaon",
+    "Vasind",
+    "Khadavli",
+    "Titwala",
+    "Ambivli",
+    "Shahad",
+    "Khopoli",
+    "Lowjee",
+    "Dolavli",
+    "Kelavli",
+    "Palasdhari",
+    "Karjat",
+    "Bhivpuri Road",
+    "Neral",
+    "Shelu",
+    "Vangani",
+    "Badlapur",
+    "Ambernath",
+    "Ulhasnagar",
+    "Vithalwadi",
+    "Kalyan",
+    "Thakurli",
+    "Dombivli",
+    "Kopar",
+    "Diva Junction",
+    "Mumbra",
+    "Kalwa",
+    "Thane",
+    "Mulund",
+    "Nahur",
+    "Bhandup",
+    "Kanjurmarg",
+    "Vikhroli",
+    "Ghatkopar",
+    "Vidyavihar",
+    "Kurla",
+    "Sion",
+    "Matunga",
+    "Dadar",
+    "Parel",
+    "Currey Road",
+    "Chinchpokli",
+    "Byculla",
+    "Sandhurst Road",
+    "Masjid",
+    "CSMT",
+]
+
+STOP_INTERPOLATION_SEQUENCES = [
+    ["CSMT", "MSD", "SBR", "BY", "CRD", "CR", "PR", "DR", "MM", "SN", "KR", "VD", "GC", "VK", "KN", "BNR", "NHP", "MNK", "TNA", "KPR", "MBQ", "DI", "KOPAR", "DOMBIVLI", "THAKURLI", "KYN"],
+    ["KYN", "SHAHAD", "AMBIVLI", "TITWALA", "KHADAVLI", "VASIND", "ASANGAON", "ATGAON", "THANSIT", "KHARDI", "UMBERMALLI", "KSR"],
+    ["KYN", "VTN", "UBR", "ABH", "BDU", "VGI", "SHD", "NRL", "BVS", "KJT", "PLG", "KELAVLI", "DOLAVLI", "LOWJEE", "KHOPOLI"],
+    ["CCG", "MR", "CHR", "GT", "BC", "MAHALAXMI", "LOWERPAREL", "ELR", "DR", "MX", "MAHIM", "BA", "KHR", "STC", "VLP", "AND", "JOS", "RAM", "GOR", "MLD", "KDV", "BSR", "DIC", "MIRA", "BYNR", "NVS", "VR", "NLB", "VIRAR"],
+    ["CSMT", "MSD", "SBR", "DCK", "RYR", "CTN", "SWR", "VDB", "KCE", "MAHIM", "BA", "KHR", "STC", "VLP", "AND", "JOS", "RAM", "GOR"],
+    ["CSMT", "MSD", "SBR", "DCK", "RYR", "CTN", "SWR", "VDB", "GTR", "CLA", "TLK", "CDB", "GVD", "MBE", "VBS", "SNV", "JNR", "NMB", "SWD", "CBD", "KBE", "KHP", "MSR", "PNV"],
+]
+
+CANONICAL_STOP_NAMES = {
+    "ASANGAON": "Asangaon",
+    "BDU": "Badlapur",
+    "BNR": "Bhandup",
+    "BVS": "Bhivpuri Road",
+    "BY": "Byculla",
+    "CR": "Currey Road",
+    "DI": "Diva Junction",
+    "DOMBIVLI": "Dombivli",
+    "DR": "Dadar",
+    "KOPAR": "Kopar",
+    "KPR": "Kalwa",
+    "KYN": "Kalyan",
+    "MNK": "Mulund",
+    "SHAHAD": "Shahad",
+    "SN": "Sion",
+    "STC": "Santa Cruz",
+    "SWD": "Seawoods Darave",
+    "THANSIT": "Thansit",
+    "VD": "Vidyavihar",
+    "VK": "Vikhroli",
+    "VLP": "Vile Parle",
+}
+
+
+def extract_times(cell):
+    return TIME_PATTERN.findall(str(cell))
+
+
+def hhmm_to_minutes(value):
+    hour, minute = value.split(":")
+    return int(hour) * 60 + int(minute)
+
+
+def format_gtfs_time(total_minutes):
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours:02d}:{minutes:02d}:00"
+
+
+def adjust_for_rollover(current_minutes, previous_total):
+    total = current_minutes
+    while previous_total is not None and total < previous_total:
+        total += 24 * 60
+    return total
+
 
 def resolve_stop_id(station_raw, stop_lookup):
     normalized = normalize_station(station_raw)
 
     if normalized in ALIAS_TO_STOP_ID:
-        return ALIAS_TO_STOP_ID[normalized]
+        stop_id = ALIAS_TO_STOP_ID[normalized]
+        stop_lookup.setdefault(normalized, stop_id)
+        return stop_id
 
     if normalized in stop_lookup:
         return stop_lookup[normalized]
 
     no_space = normalized.replace(" ", "")
-    for key, sid in ALIAS_TO_STOP_ID.items():
+    for key, stop_id in ALIAS_TO_STOP_ID.items():
         if key.replace(" ", "") == no_space:
-            return sid
+            stop_lookup[normalized] = stop_id
+            return stop_id
 
-    for key, sid in ALIAS_TO_STOP_ID.items():
-        if no_space in key.replace(" ", "") or key.replace(" ", "") in no_space:
-            return sid
+    for key, stop_id in ALIAS_TO_STOP_ID.items():
+        compact = key.replace(" ", "")
+        if no_space in compact or compact in no_space:
+            stop_lookup[normalized] = stop_id
+            return stop_id
 
     stop_id = normalized.replace(" ", "_")
-    if stop_id not in stop_lookup:
-        stop_lookup[normalized] = stop_id
-        print(f"  NEW STOP: '{station_raw}' -> {stop_id}")
-
+    stop_lookup[normalized] = stop_id
+    print(f"  NEW STOP: '{station_raw}' -> {stop_id}")
     return stop_id
 
 
-# -----------------------------
-# Load stops.txt
-# -----------------------------
-if os.path.exists(STOPS_FILE):
-    stops_df = pd.read_csv(STOPS_FILE, encoding="latin1")
-else:
-    stops_df = pd.DataFrame(columns=[
-        "stop_id", "stop_name", "stop_lat", "stop_lon", "location_type", "parent_station", "zone_id"
-    ])
+def clean_value(value):
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
 
-stop_lookup = {}
-for _, row in stops_df.iterrows():
-    name = normalize_station(row["stop_name"])
-    stop_lookup[name] = row["stop_id"]
 
-stop_ids_existing = set(stops_df["stop_id"].astype(str).values)
+def load_csv(path):
+    return pd.read_csv(path, encoding="latin1")
 
-print(f"Loaded {len(stop_lookup)} stops from stops.txt")
 
-new_stops = []
+def is_ignored_column(name):
+    label = str(name).strip()
+    return not label or "unnamed" in label.lower() or label.lower() == "nan"
 
-# -----------------------------
-# Process timetable CSV files
-# -----------------------------
-for file in sorted(os.listdir(INPUT_DIR)):
 
-    if not file.endswith(".csv"):
-        continue
+def detect_layout(df):
+    if any(str(col).strip().upper() == "TRAIN" for col in df.columns):
+        return "train_rows"
 
-    if file.startswith("._"):
-        continue
+    other_cols = [col for col in df.columns[1:] if not is_ignored_column(col)]
+    if not other_cols:
+        return "unknown"
 
-    # Use proper route_id from mapping
-    route_id = FILE_TO_ROUTE.get(file)
-    direction_id = FILE_TO_DIRECTION.get(file, 0)
-    trip_prefix = FILE_TO_PREFIX.get(file, file.replace(".csv", ""))
+    train_like = sum(bool(TRAIN_PATTERN.match(str(col).strip())) for col in other_cols)
+    return "station_rows" if train_like >= len(other_cols) / 2 else "train_rows"
 
-    if route_id is None:
-        print(f"  SKIP unknown file: {file}")
-        continue
 
-    filepath = os.path.join(INPUT_DIR, file)
-    print(f"\nReading: {filepath} (route={route_id}, direction={direction_id})")
+def ensure_column(df, name):
+    if name not in df.columns:
+        df[name] = ""
+    return df
 
-    df = pd.read_csv(filepath, encoding="latin1")
 
-    station_col = None
-    for candidate in ["station", "Station", "STATION"]:
-        if candidate in df.columns:
-            station_col = candidate
-            break
+def has_nonblank(row, columns):
+    for column in columns:
+        if column in row.index and clean_value(row[column]):
+            return True
+    return False
 
-    if station_col is None:
-        station_col = df.columns[0]
-        print(f"  WARNING: using first column as station -> '{station_col}'")
 
-    stations = df[station_col]
-    train_columns = [c for c in df.columns if c != station_col]
+def reorder_columns(df, ordered_columns):
+    ordered = [col for col in ordered_columns if col in df.columns]
+    remainder = [col for col in df.columns if col not in ordered]
+    return df[ordered + remainder]
 
+
+def normalize_central_dataframe(file, df):
+    df = df.copy()
+    df = ensure_column(df, "Umbermali")
+    if "Umbermalli" in df.columns:
+        df["Umbermali"] = df["Umbermali"].where(df["Umbermali"].astype(str).str.strip().ne(""), df["Umbermalli"])
+        df = df.drop(columns=["Umbermalli"])
+
+    if file == "CR_timetable_DN.csv":
+        df = ensure_column(df, "Shahad")
+        khopoli_only = ["Palasdhari", "Kelavli", "Dolavli", "Lowjee"]
+        kasara_branch = ["Ambivli", "Titwala", "Khadavli", "Vasind", "Asangaon", "Atgaon", "Thansit", "Khardi", "Umbermali", "Kasara"]
+
+        for idx, row in df.iterrows():
+            khopoli_value = clean_value(row.get("Khopoli", ""))
+            if khopoli_value and has_nonblank(row, kasara_branch) and not has_nonblank(row, khopoli_only):
+                df.at[idx, "Shahad"] = khopoli_value
+                df.at[idx, "Khopoli"] = ""
+
+        return reorder_columns(df, CENTRAL_DN_ORDER)
+
+    if file == "CR_timetable_UP.csv":
+        df = ensure_column(df, "Khopoli")
+        khopoli_branch = ["Lowjee", "Dolavli", "Kelavli", "Palasdhari", "Karjat"]
+        kasara_only = ["Kasara", "Umbermali", "Khardi", "Thansit", "Atgaon", "Asangaon", "Vasind", "Khadavli", "Titwala", "Ambivli"]
+
+        for idx, row in df.iterrows():
+            shahad_value = clean_value(row.get("Shahad", ""))
+            if shahad_value and has_nonblank(row, khopoli_branch) and not has_nonblank(row, kasara_only):
+                df.at[idx, "Khopoli"] = shahad_value
+                df.at[idx, "Shahad"] = ""
+
+        return reorder_columns(df, CENTRAL_UP_ORDER)
+
+    return df
+
+
+def append_trip(route_id, direction_id, trip_id, station_time_pairs, stop_lookup):
+    if len(station_time_pairs) < 2:
+        return
+
+    shape_id = SHAPE_BY_ROUTE.get(route_id, "") if INCLUDE_SHAPES else ""
+    trip_rows.append([route_id, "DAILY", trip_id, direction_id, shape_id])
+
+    previous_total = None
+    for seq, (station_name, time_value) in enumerate(station_time_pairs, start=1):
+        total_minutes = adjust_for_rollover(hhmm_to_minutes(time_value), previous_total)
+        previous_total = total_minutes
+        time_str = format_gtfs_time(total_minutes)
+        stop_id = resolve_stop_id(station_name, stop_lookup)
+        stop_name_by_id.setdefault(stop_id, str(station_name).strip())
+        stop_rows.append([trip_id, time_str, time_str, stop_id, seq])
+
+
+def process_train_rows(df, route_id, direction_id, trip_prefix, stop_lookup):
+    train_col = next((col for col in df.columns if str(col).strip().upper() == "TRAIN"), df.columns[0])
+    station_columns = [col for col in df.columns if col != train_col and not is_ignored_column(col)]
+
+    print(f"  Layout: train_rows | Trains: {len(df)}, Stations: {len(station_columns)}")
+
+    for _, row in df.iterrows():
+        train = str(row[train_col]).strip()
+        if not TRAIN_PATTERN.match(train):
+            continue
+
+        variants_by_station = {station: extract_times(row[station]) for station in station_columns}
+        max_variants = max((len(times) for times in variants_by_station.values()), default=0)
+
+        for variant_idx in range(max_variants):
+            station_time_pairs = []
+            for station in station_columns:
+                times = variants_by_station[station]
+                if variant_idx < len(times):
+                    station_time_pairs.append((station, times[variant_idx]))
+
+            append_trip(
+                route_id,
+                direction_id,
+                f"{trip_prefix}_{train}_{variant_idx + 1}",
+                station_time_pairs,
+                stop_lookup,
+            )
+
+
+def process_station_rows(df, route_id, direction_id, trip_prefix, stop_lookup):
+    station_col = next(
+        (col for col in df.columns if str(col).strip().upper() == "STATION"),
+        df.columns[0],
+    )
+
+    stations = df[station_col].fillna("").astype(str)
     train_columns = [
-        c for c in train_columns
-        if str(c).strip()
-        and "unnamed" not in str(c).lower()
-        and str(c).strip().lower() != "nan"
+        col
+        for col in df.columns
+        if col != station_col and not is_ignored_column(col) and TRAIN_PATTERN.match(str(col).strip())
     ]
 
-    print(f"  Stations: {len(stations)}, Trains: {len(train_columns)}")
+    print(f"  Layout: station_rows | Stations: {len(stations)}, Trains: {len(train_columns)}")
 
     for train_col in train_columns:
-
         train = str(train_col).strip()
+        max_variants = max((len(extract_times(cell)) for cell in df[train_col]), default=0)
 
-        if not re.match(r"^\d{4,6}$", train):
+        for variant_idx in range(max_variants):
+            station_time_pairs = []
+            for idx, station_raw in enumerate(stations):
+                times = extract_times(df.at[idx, train_col])
+                if variant_idx < len(times):
+                    station_time_pairs.append((station_raw, times[variant_idx]))
+
+            append_trip(
+                route_id,
+                direction_id,
+                f"{trip_prefix}_{train}_{variant_idx + 1}",
+                station_time_pairs,
+                stop_lookup,
+            )
+
+
+def load_existing_stops():
+    if os.path.exists(STOPS_FILE) and os.path.getsize(STOPS_FILE) > 0:
+        try:
+            return pd.read_csv(STOPS_FILE, encoding="latin1")
+        except pd.errors.EmptyDataError:
+            pass
+
+    return pd.DataFrame(
+        columns=[
+            "stop_id",
+            "stop_name",
+            "stop_lat",
+            "stop_lon",
+            "location_type",
+            "parent_station",
+            "zone_id",
+        ]
+    )
+
+
+def write_routes_file(route_ids):
+    routes_df = pd.DataFrame(
+        [
+            {
+                "route_id": route_id,
+                **ROUTE_METADATA[route_id],
+            }
+            for route_id in sorted(route_ids)
+            if route_id in ROUTE_METADATA
+        ],
+        columns=[
+            "route_id",
+            "agency_id",
+            "route_short_name",
+            "route_long_name",
+            "route_type",
+            "route_color",
+        ],
+    )
+    routes_df.to_csv(ROUTES_FILE, index=False)
+
+
+def write_calendar_file(service_ids):
+    today = date.today()
+    start_date = f"{today.year}0101"
+    end_date = f"{today.year + 1}1231"
+
+    rows = []
+    for service_id in sorted(service_ids):
+        if service_id == "DAILY":
+            rows.append(
+                {
+                    "service_id": service_id,
+                    "monday": 1,
+                    "tuesday": 1,
+                    "wednesday": 1,
+                    "thursday": 1,
+                    "friday": 1,
+                    "saturday": 1,
+                    "sunday": 1,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                }
+            )
+
+    calendar_df = pd.DataFrame(
+        rows,
+        columns=[
+            "service_id",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+            "start_date",
+            "end_date",
+        ],
+    )
+    calendar_df.to_csv(CALENDAR_FILE, index=False)
+    return start_date, end_date
+
+
+def write_feed_info_file(start_date, end_date):
+    today = date.today().strftime("%Y%m%d")
+    feed_info_df = pd.DataFrame(
+        [
+            {
+                "feed_publisher_name": "Indian Railways",
+                "feed_publisher_url": "https://www.indianrailways.gov.in/",
+                "feed_lang": "en",
+                "feed_contact_url": "https://www.indianrailways.gov.in/",
+                "feed_start_date": start_date,
+                "feed_end_date": end_date,
+                "feed_version": today,
+            }
+        ],
+        columns=[
+            "feed_publisher_name",
+            "feed_publisher_url",
+            "feed_lang",
+            "feed_contact_url",
+            "feed_start_date",
+            "feed_end_date",
+            "feed_version",
+        ],
+    )
+    feed_info_df.to_csv(FEED_INFO_FILE, index=False)
+
+
+def parse_coord_value(value):
+    if pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return float(text)
+
+
+def extrapolate_coordinate(sequence, coords_by_stop, anchor_idx, target_idx, step_idx):
+    anchor_id = sequence[anchor_idx]
+    target_id = sequence[target_idx]
+    anchor = coords_by_stop[anchor_id]
+    target = coords_by_stop[target_id]
+    fraction = (step_idx - anchor_idx) / (target_idx - anchor_idx)
+    lat = anchor[0] + (target[0] - anchor[0]) * fraction
+    lon = anchor[1] + (target[1] - anchor[1]) * fraction
+    return round(lat, 6), round(lon, 6)
+
+
+def build_inferred_coords(existing_records):
+    coords_by_stop = {}
+
+    for stop_id, record in existing_records.items():
+        lat = parse_coord_value(record.get("stop_lat", ""))
+        lon = parse_coord_value(record.get("stop_lon", ""))
+        if lat is not None and lon is not None:
+            coords_by_stop[stop_id] = (lat, lon)
+
+    for stop_id, coord in STOP_COORDS.items():
+        coords_by_stop[stop_id] = coord
+
+    changed = True
+    while changed:
+        changed = False
+
+        for sequence in STOP_INTERPOLATION_SEQUENCES:
+            for idx, stop_id in enumerate(sequence):
+                if stop_id in coords_by_stop:
+                    continue
+
+                prev_idx = next((i for i in range(idx - 1, -1, -1) if sequence[i] in coords_by_stop), None)
+                next_idx = next((i for i in range(idx + 1, len(sequence)) if sequence[i] in coords_by_stop), None)
+                coord = None
+
+                if prev_idx is not None and next_idx is not None:
+                    coord = extrapolate_coordinate(sequence, coords_by_stop, prev_idx, next_idx, idx)
+                elif prev_idx is not None:
+                    prev2_idx = next((i for i in range(prev_idx - 1, -1, -1) if sequence[i] in coords_by_stop), None)
+                    if prev2_idx is not None:
+                        coord = extrapolate_coordinate(sequence, coords_by_stop, prev2_idx, prev_idx, idx)
+                elif next_idx is not None:
+                    next2_idx = next((i for i in range(next_idx + 1, len(sequence)) if sequence[i] in coords_by_stop), None)
+                    if next2_idx is not None:
+                        coord = extrapolate_coordinate(sequence, coords_by_stop, next_idx, next2_idx, idx)
+
+                if coord is not None:
+                    coords_by_stop[stop_id] = coord
+                    changed = True
+
+    return coords_by_stop
+
+
+def build_stops_file(existing_stops_df, used_stop_ids):
+    existing_stops_df = existing_stops_df.copy()
+    existing_records = {}
+    for _, row in existing_stops_df.iterrows():
+        stop_id = clean_value(row.get("stop_id", ""))
+        if stop_id:
+            existing_records[stop_id] = row.to_dict()
+
+    inferred_coords = build_inferred_coords(existing_records)
+
+    parent_stop_ids = set()
+    for stop_id in used_stop_ids:
+        record = existing_records.get(stop_id, {})
+        parent_station = clean_value(record.get("parent_station", ""))
+        if parent_station:
+            parent_stop_ids.add(parent_station)
+
+    final_stop_ids = sorted(used_stop_ids | parent_stop_ids)
+    final_rows = []
+
+    for stop_id in final_stop_ids:
+        existing = existing_records.get(stop_id, {})
+        fallback_name = stop_id.replace("_", " ").title()
+        stop_name = (
+            CANONICAL_STOP_NAMES.get(stop_id)
+            or clean_value(existing.get("stop_name", ""))
+            or stop_name_by_id.get(stop_id)
+            or fallback_name
+        )
+        stop_lat = clean_value(existing.get("stop_lat", ""))
+        stop_lon = clean_value(existing.get("stop_lon", ""))
+        coord = inferred_coords.get(stop_id)
+        if coord is not None:
+            coord_lat, coord_lon = coord
+            if stop_id in STOP_COORDS:
+                stop_lat = coord_lat
+                stop_lon = coord_lon
+            else:
+                stop_lat = stop_lat or coord_lat
+                stop_lon = stop_lon or coord_lon
+
+        final_rows.append(
+            {
+                "stop_id": stop_id,
+                "stop_name": stop_name,
+                "stop_lat": stop_lat,
+                "stop_lon": stop_lon,
+                "location_type": clean_value(existing.get("location_type", "")) or "0",
+                "parent_station": clean_value(existing.get("parent_station", "")),
+                "zone_id": clean_value(existing.get("zone_id", "")),
+            }
+        )
+
+    stops_df = pd.DataFrame(
+        final_rows,
+        columns=[
+            "stop_id",
+            "stop_name",
+            "stop_lat",
+            "stop_lon",
+            "location_type",
+            "parent_station",
+            "zone_id",
+        ],
+    )
+    stops_df.to_csv(STOPS_FILE, index=False)
+    return stops_df
+
+
+def write_gtfs_zip():
+    feed_files = [
+        "agency.txt",
+        "calendar.txt",
+        "feed_info.txt",
+        "routes.txt",
+        "stop_times.txt",
+        "stops.txt",
+        "trips.txt",
+    ]
+    if INCLUDE_SHAPES:
+        feed_files.append("shapes.txt")
+    with zipfile.ZipFile(GTFS_ZIP, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for filename in feed_files:
+            path = os.path.join(GTFS_DIR, filename)
+            if os.path.exists(path):
+                archive.write(path, arcname=filename)
+
+
+def main():
+    os.makedirs(GTFS_DIR, exist_ok=True)
+
+    stops_df = load_existing_stops()
+    stop_lookup = {
+        normalize_station(row["stop_name"]): row["stop_id"]
+        for _, row in stops_df.iterrows()
+        if str(row.get("stop_id", "")).strip()
+    }
+    used_route_ids = set()
+
+    print(f"Loaded {len(stop_lookup)} stops from stops.txt")
+
+    for file in sorted(os.listdir(INPUT_DIR)):
+        if not file.endswith(".csv") or file.startswith("._"):
             continue
 
-        max_variants = 0
-        for i in range(len(df)):
-            cell = df[train_col].iloc[i] if train_col in df.columns else df.iloc[i][train_col]
-            if pd.isna(cell):
-                continue
-            variants = str(cell).split("\n")
-            valid_variants = [v for v in variants if re.match(r"^\d{2}:\d{2}$", v.strip())]
-            max_variants = max(max_variants, len(valid_variants))
+        route_id = FILE_TO_ROUTE.get(file)
+        direction_id = FILE_TO_DIRECTION.get(file, 0)
+        trip_prefix = FILE_TO_PREFIX.get(file, file.replace(".csv", ""))
 
-        if max_variants == 0:
+        if route_id is None:
+            print(f"  SKIP unknown file: {file}")
             continue
 
-        for v in range(max_variants):
-            # Prefix trip_id with direction to avoid duplicates across DN/UP
-            trip_id = f"{trip_prefix}_{train}_{v + 1}"
-            trip_rows.append([route_id, "DAILY", trip_id, direction_id])
+        filepath = os.path.join(INPUT_DIR, file)
+        print(f"\nReading: {filepath} (route={route_id}, direction={direction_id})")
 
-            seq = 0
-            prev_minutes = -1
+        df = load_csv(filepath)
+        if file.startswith("CR_timetable_"):
+            df = normalize_central_dataframe(file, df)
+        layout = detect_layout(df)
 
-            for i in range(len(df)):
-                cell = df[train_col].iloc[i] if train_col in df.columns else df.iloc[i][train_col]
-                if pd.isna(cell):
-                    continue
+        if layout == "train_rows":
+            process_train_rows(df, route_id, direction_id, trip_prefix, stop_lookup)
+        elif layout == "station_rows":
+            process_station_rows(df, route_id, direction_id, trip_prefix, stop_lookup)
+        else:
+            print(f"  WARNING: Could not detect CSV layout for {file}")
+            continue
 
-                variants = str(cell).split("\n")
-                valid_variants = [vv for vv in variants if re.match(r"^\d{2}:\d{2}$", vv.strip())]
+        used_route_ids.add(route_id)
 
-                if v >= len(valid_variants):
-                    continue
+    stop_df = pd.DataFrame(
+        stop_rows,
+        columns=["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"],
+    )
+    trip_df = pd.DataFrame(
+        trip_rows,
+        columns=["route_id", "service_id", "trip_id", "direction_id", "shape_id"],
+    )
 
-                t = valid_variants[v].strip()
+    if not stop_df.empty:
+        valid_trips = stop_df.groupby("trip_id").filter(lambda rows: len(rows) >= 2)["trip_id"].unique()
+        stop_df = stop_df[stop_df["trip_id"].isin(valid_trips)]
+        trip_df = trip_df[trip_df["trip_id"].isin(valid_trips)]
 
-                h, m = t.split(":")
-                cur_minutes = int(h) * 60 + int(m)
+    stop_df = stop_df.drop_duplicates(subset=["trip_id", "stop_sequence"])
+    trip_df = trip_df.drop_duplicates(subset=["trip_id"])
+    stop_df = stop_df.sort_values(["trip_id", "stop_sequence"]) if not stop_df.empty else stop_df
 
-                if cur_minutes < prev_minutes:
-                    continue
+    stop_df.to_csv(STOP_TIMES, index=False)
+    trip_df.to_csv(TRIPS, index=False)
 
-                prev_minutes = cur_minutes
+    used_stop_ids = set(stop_df.get("stop_id", pd.Series(dtype=str)).astype(str))
+    stops_df = build_stops_file(stops_df, used_stop_ids)
+    write_routes_file(used_route_ids)
+    start_date, end_date = write_calendar_file(set(trip_df.get("service_id", pd.Series(dtype=str)).astype(str)))
+    write_feed_info_file(start_date, end_date)
+    write_gtfs_zip()
 
-                time_str = f"{t}:00"
-
-                station_raw = str(stations.iloc[i])
-                stop_id = resolve_stop_id(station_raw, stop_lookup)
-
-                if re.match(r"^\d{2}:\d{2}", stop_id):
-                    continue
-
-                seq += 1
-                stop_rows.append([trip_id, time_str, time_str, stop_id, seq])
+    print("\nGTFS generated successfully")
+    print(f"  stop_times: {len(stop_df)} rows")
+    print(f"  trips: {len(trip_df)} rows")
+    print(f"  stops: {len(stops_df)} rows")
+    print(f"  routes: {len(used_route_ids)} rows")
+    print(f"  feed zip: {GTFS_ZIP}")
 
 
-# -----------------------------
-# Output
-# -----------------------------
-os.makedirs("gtfs", exist_ok=True)
-
-stop_df = pd.DataFrame(stop_rows, columns=[
-    "trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"
-])
-
-trip_df = pd.DataFrame(trip_rows, columns=[
-    "route_id", "service_id", "trip_id", "direction_id"
-])
-
-# Remove trips with < 2 stops (invalid in GTFS)
-valid_trips = stop_df.groupby("trip_id").filter(lambda x: len(x) >= 2)["trip_id"].unique()
-stop_df = stop_df[stop_df["trip_id"].isin(valid_trips)]
-trip_df = trip_df[trip_df["trip_id"].isin(valid_trips)]
-
-# Remove duplicates
-stop_df = stop_df.drop_duplicates(subset=["trip_id", "stop_sequence"])
-trip_df = trip_df.drop_duplicates(subset=["trip_id"])
-
-# Sort
-stop_df = stop_df.sort_values(["trip_id", "stop_sequence"])
-
-# Write
-stop_df.to_csv(STOP_TIMES, index=False)
-trip_df.to_csv(TRIPS, index=False)
-
-# Update stops.txt with any new stops
-# Collect all stop_ids actually used
-used_stop_ids = set(stop_df["stop_id"].unique())
-
-# Add missing stops to stops_df
-for sid in used_stop_ids:
-    if sid not in stop_ids_existing:
-        if not stops_df["stop_id"].eq(sid).any():
-            lat, lon = STOP_COORDS.get(sid, ("", ""))
-            new_stops.append({
-                "stop_id": sid,
-                "stop_name": sid.replace("_", " ").title(),
-                "stop_lat": lat,
-                "stop_lon": lon,
-                "location_type": 0,
-                "parent_station": "",
-                "zone_id": ""
-            })
-
-# Also fill in missing coordinates for existing stops
-for idx, row in stops_df.iterrows():
-    sid = str(row["stop_id"])
-    if (pd.isna(row.get("stop_lat")) or str(row.get("stop_lat")).strip() == "") and sid in STOP_COORDS:
-        lat, lon = STOP_COORDS[sid]
-        stops_df.at[idx, "stop_lat"] = lat
-        stops_df.at[idx, "stop_lon"] = lon
-
-if new_stops:
-    stops_df = pd.concat([stops_df, pd.DataFrame(new_stops)], ignore_index=True)
-
-stops_df.drop_duplicates(subset=["stop_id"], inplace=True)
-stops_df.to_csv(STOPS_FILE, index=False)
-
-print(f"\nGTFS generated successfully")
-print(f"  stop_times: {len(stop_df)} rows")
-print(f"  trips: {len(trip_df)} rows")
-print(f"  stops: {len(stops_df)} rows")
-print(f"  new stops added: {len(new_stops)}")
+if __name__ == "__main__":
+    main()
